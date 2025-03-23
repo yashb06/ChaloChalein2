@@ -1,14 +1,18 @@
 import streamlit as st
+import sys
+sys.path.append("c:/Users/DARSHAN/OneDrive - somaiya.edu/Desktop/ChaloChalein")
+
 from components.authentication import show_auth_page
 from components.homepage import show_homepage
-from components.chatbot import show_chatbot
+from components.chatbot import show_chatbot  # Importing the chatbot function
 from components.map_view import show_map
 from firebase_admin import auth
 import firebase_admin
 from firebase_admin import credentials
+import requests
 from components.trips import show_trips
 
-# Add these at the top of your file
+# Set up the Streamlit page configuration
 st.set_page_config(
     page_title="AI Travel Planner",
     page_icon="✈️",
@@ -71,7 +75,7 @@ st.markdown("""
 # Initialize Firebase only if it hasn't been initialized
 if 'firebase_initialized' not in st.session_state:
     try:
-        cred = credentials.Certificate("D:\\ChaloChalein\\streamlit\\chalochalein-1ba3c-firebase-adminsdk-fbsvc-0c3d443ca8.json")
+        cred = credentials.Certificate("streamlit/chalochalein-1ba3c-firebase-adminsdk-fbsvc-0c3d443ca8.json")
         default_app = firebase_admin.initialize_app(cred)
         st.session_state.firebase_initialized = True
     except ValueError as e:
@@ -81,7 +85,7 @@ if 'firebase_initialized' not in st.session_state:
 def main():
     # Initialize session state
     if 'user' not in st.session_state:
-        st.session_state.user = None
+        st.session_state.user = None  # Initialize user key
     if 'page' not in st.session_state:
         st.session_state.page = 'home'
 
@@ -109,42 +113,33 @@ def main():
             # Navigation Buttons
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🏠 Home", key="home_btn", 
-                            help="Go to homepage",
-                            use_container_width=True):
+                if st.button("🏠 Home", key="home_btn", help="Go to homepage", use_container_width=True):
                     st.session_state.page = 'home'
                     st.rerun()
-            
             with col2:
-                if st.button("✈️ Plan Trip", key="plan_btn",
-                            help="Start planning your trip",
-                            use_container_width=True):
+                if st.button("✈️ Plan Trip", key="plan_btn", help="Start planning your trip", use_container_width=True):
                     st.session_state.page = 'chatbot'
                     st.rerun()
 
-            if st.button("🗺️ My Trips", key="trips_btn",
-                        help="View your saved trips",
-                        use_container_width=True):
+            if st.button("🗺️ My Trips", key="trips_btn", help="View your saved trips", use_container_width=True):
                 st.session_state.page = 'trips'
                 st.rerun()
-
+                
             st.markdown('<div class="separator"></div>', unsafe_allow_html=True)
 
-            # Logout Button at the bottom
-            if st.button("🚪 Logout", key="logout_btn",
-                        help="Sign out from your account",
-                        use_container_width=True):
+            if st.button("🚪 Logout", key="logout_btn", help="Sign out from your account", use_container_width=True):
                 st.session_state.user = None
                 st.session_state.page = 'home'
                 st.rerun()
 
+    
     # Main content
     if st.session_state.page == 'home':
-        show_homepage()
+        show_homepage() 
     elif st.session_state.page == 'auth':
         show_auth_page()
     elif st.session_state.page == 'chatbot' and st.session_state.user:
-        show_chatbot()
+        show_chatbot()  # Call the chatbot function to display the chatbot interface
     elif st.session_state.page == 'trips' and st.session_state.user:
         show_trips()
     else:
