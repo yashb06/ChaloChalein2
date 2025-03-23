@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 import json
 import re
+import requests
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 from utils.api_helpers import get_weather_forecast, get_location_coordinates
@@ -84,6 +85,25 @@ class TravelChatbot:
         # If no JSON-like content found, return the original content
         return content
 
+    def ask_travel_vehicle(self):
+        """Ask the user if they have planned their travel vehicle."""
+        travel_vehicle = st.radio("Do you already have planned your travel vehicle?", ["Yes", "No"])
+        if travel_vehicle == "Yes":
+            st.write("Great! Please let me know how you plan to travel.")
+        else:
+            st.write("Here are some ways to travel to your destination:")
+            travel_options = ["Train", "Flight", "Bus"]
+            selected_option = st.selectbox("Select a mode of transportation:", travel_options)
+            if selected_option == "Train":
+                st.write("You can book train tickets on websites like [Trainline](https://www.thetrainline.com) or [Amtrak](https://www.amtrak.com).")
+            elif selected_option == "Flight":
+                st.write("You can book flights on websites like [Skyscanner](https://www.skyscanner.com) or [Kayak](https://www.kayak.com).")
+            elif selected_option == "Bus":
+                st.write("You can book bus tickets on websites like [Greyhound](https://www.greyhound.com) or [FlixBus](https://www.flixbus.com).")
+        
+        st.session_state.chat_state["step"] = "traveling_with"  # Move to the next step in the conversation
+        self.ask_travel_vehicle()  # Prompt user for travel vehicle preferences
+
     def generate_itinerary(self):
         # Make sure travel_info is initialized before accessing it
         if 'travel_info' not in st.session_state:
@@ -106,12 +126,8 @@ class TravelChatbot:
         
         # Get weather forecast
         try:
-            coords = self.get_location_coordinates(info['destination'])
-            if coords:
-                weather = get_weather_forecast(coords['lat'], coords['lng'], info['start_date'])
-            else:
-                weather = "Weather data not available"
-                st.warning(f"Could not find coordinates for {info['destination']}")
+            city = info['destination']
+            weather = get_weather_forecast(city)
         except Exception as e:
             weather = "Weather data not available"
             st.warning("Could not fetch weather data")
@@ -142,7 +158,8 @@ class TravelChatbot:
                                 "time": "14:00",
                                 "activity": "description",
                                 "location": "place name",
-                                "coordinates": "lat,lng"
+                                "coordinates": "lat,lng",
+                                "weather": "weather forecast"
                             }}
                         ]
                     }}
@@ -195,6 +212,7 @@ class TravelChatbot:
                 
                 # Store the parsed itinerary
                 st.session_state.travel_info['itinerary'] = itinerary
+                st.session_state.travel_info['famous_places'] = self.fetch_famous_places(info['destination'])  # Fetch famous places
                 return itinerary
                 
             except json.JSONDecodeError as e:
@@ -232,7 +250,8 @@ class TravelChatbot:
                                 "time": "14:00",
                                 "activity": "description",
                                 "location": "place name",
-                                "coordinates": "lat,lng"
+                                "coordinates": "lat,lng",
+                                "weather": "weather forecast"
                             }}
                         ]
                     }}
@@ -270,69 +289,108 @@ class TravelChatbot:
         except Exception as e:
             return f"I encountered an error while trying to update your itinerary: {str(e)}"
             
-    def suggest_locations(self, query):
-        """Suggest additional locations based on user query"""
-        try:
-            info = st.session_state.travel_info
-            
-            system_message = f"""You are a helpful travel assistant suggesting additional locations for a trip to {info['destination']}.
-            The user is interested in: {', '.join(info['interests'])}.
-            The user request is: "{query}"
-            
-            YOU MUST RESPOND WITH ONLY A VALID JSON OBJECT containing suggested locations, with no additional text before or after.
-            The response must follow this exact structure:
-            {{
-                "suggested_locations": [
-                    {{
-                        "name": "Location name",
-                        "description": "Brief description",
-                        "reason": "Why it matches user interests",
-                        "coordinates": "lat,lng"
-                    }}
-                ]
-            }}"""
-            
-            messages = [
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": query}
+    def fetch_famous_places(self, city):
+        """Fetch famous places in the specified city using Foursquare API."""
+        # Example API call to Foursquare API (replace with actual API key and endpoint)
+        api_key = st.secrets["FOURSQUARE_API_KEY"]
+        url = f"https://api.foursquare.com/v2/venues/explore?near={city}&client_id={api_key}&v=20230101"
+        
+        response = requests.get(url)
+        if response.status_code == 200:
+            places = response.json().get("results", [])
+            famous_places = []
+            for place in places:
+                name = place.get("name")
+                address = place.get("formatted_address")
+                image_url = place.get("imageUrl")  # Assuming Foursquare API returns an image URL directly
+                famous_places.append({
+                    "name": name,
+                    "address": address,
+                    "image_url": image_url
+                })
+            return famous_places
+        else:
+            st.error("Failed to fetch famous places.")
+            return []
+def suggest_locations(self, city, query=None):
+    """
+    Suggest famous locations based on the user's destination city and additional
+    locations based on user query.
+    """
+    # First part: fetch famous places
+    famous_places = self.fetch_famous_places(city)
+    if famous_places and not query:
+        places_info = "\n".join([f"{place['name']} - {place['address']} ![Image]({place['image_url']})" 
+                            for place in famous_places if place['image_url']])
+        return f"Here are some famous places in {city}:\n{places_info}"
+    elif not query:
+        return "No famous places found."
+    
+    # Second part: suggest additional locations based on user query
+    try:
+        info = st.session_state.travel_info
+        
+        system_message = f"""You are a helpful travel assistant suggesting additional locations for a trip to {info['destination']}.
+        The user is interested in: {', '.join(info['interests'])}.
+        The user request is: "{query}"
+        
+        YOU MUST RESPOND WITH ONLY A VALID JSON OBJECT containing suggested locations, with no additional text before or after.
+        The response must follow this exact structure:
+        {{
+            "suggested_locations": [
+                {{
+                    "name": "Location name",
+                    "description": "Brief description",
+                    "reason": "Why it matches user interests",
+                    "coordinates": "lat,lng",
+                    "weather": "weather forecast"
+                    
+                }}
             ]
+        }}"""
+        
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": query}
+        ]
+        
+        # Get response from the LLM
+        response = self.llm.invoke(messages)
+        
+        # Extract JSON from the response
+        json_str = self.extract_json_from_response(response.content)
+        
+        try:
+            # Parse the JSON string
+            suggestions = json.loads(json_str)
             
-            # Get response from the LLM
-            response = self.llm.invoke(messages)
+            # Validate that the response has the expected structure
+            if "suggested_locations" not in suggestions:
+                return f"I received invalid suggestions. Please try again with more specific instructions."
             
-            # Extract JSON from the response
-            json_str = self.extract_json_from_response(response.content)
+            # Store the suggestions
+            if 'suggested_locations' not in st.session_state.travel_info:
+                st.session_state.travel_info['suggested_locations'] = []
             
-            try:
-                # Parse the JSON string
-                suggestions = json.loads(json_str)
-                
-                # Validate that the response has the expected structure
-                if "suggested_locations" not in suggestions:
-                    return f"I received invalid suggestions. Please try again with more specific instructions."
-                
-                # Store the suggestions
-                if 'suggested_locations' not in st.session_state.travel_info:
-                    st.session_state.travel_info['suggested_locations'] = []
-                
-                # Add new suggestions
-                st.session_state.travel_info['suggested_locations'].extend(
-                    suggestions.get('suggested_locations', [])
-                )
-                
-                # Prepare human-readable response
-                location_list = []
-                for loc in suggestions.get('suggested_locations', []):
-                    location_list.append(f"• **{loc['name']}**: {loc['description']}")
-                
-                return f"I've added these new locations to your map:\n\n" + "\n\n".join(location_list)
-                
-            except json.JSONDecodeError:
-                # If JSON parsing fails, return the original response
-                return f"I couldn't process the location suggestions. Here's what I understand about your request: {response.content}"
-                
-        except Exception as e:
-            return f"I encountered an error while suggesting locations: {str(e)}"
+            # Add new suggestions
+            st.session_state.travel_info['suggested_locations'].extend(
+                suggestions.get('suggested_locations', [])
+            )
+            
+            # Prepare human-readable response
+            location_list = []
+            for loc in suggestions.get('suggested_locations', []):
+                location_list.append(f"• **{loc['name']}**: {loc['description']}")
+            
+            return f"I've added these new locations to your map:\n\n" + "\n\n".join(location_list)
+            
+        except json.JSONDecodeError:
+            # If JSON parsing fails, return the original response
+            return f"I couldn't process the location suggestions. Here's what I understand about your request: {response.content}"
+            
+    except Exception as e:
+        return f"I encountered an error while suggesting locations: {str(e)}"
+
 
 def show_chatbot():
     st.title("🌍 ChaloChalein")
@@ -351,9 +409,11 @@ def show_chatbot():
             "end_date": today + timedelta(days=1),
             "duration": 1,
             "arrival_time": datetime.now().time(),
+            "traveling_via": "vehicle",
             "departure_time": datetime.now().time(),
             "traveling_with": "No",
             "interests": [],
+            "suggested_locations": []
         }
 
     # Create two columns for the main layout
@@ -373,7 +433,17 @@ def show_chatbot():
             city_input = st.text_input("🌍 Enter your destination city:", value=chat_state["city"])
             if city_input:
                 chat_state.update({"city": city_input, "step": "dates"})
-                st.experimental_rerun()
+                # Fetch weather data for the entered city
+                weather_data = get_weather_forecast(city_input)
+                if weather_data:
+                    if "error" in weather_data:
+                        st.warning(weather_data["error"])
+                    else:
+                        st.write(f"Weather in {weather_data['location']}: {weather_data['temperature']}°C")
+                else:
+                    st.warning("Could not retrieve weather data.")
+                # Instead of rerunning the app, we can update the state
+                st.rerun()
 
         elif chat_state["step"] == "dates":
             col1, col2 = st.columns(2)
@@ -395,8 +465,31 @@ def show_chatbot():
                             "duration": duration,
                             "step": "times"
                         })
-                        st.experimental_rerun()
-
+                        # Instead of rerunning the app, we can update the state
+                st.rerun()
+        elif chat_state["step"] == "traveling_via":
+            st.write(" Travel Vehicle")
+            traveling_via = st.radio("Do you already have planned your travel vehicle?", ["Yes", "No"])
+            if traveling_via == "Yes":
+                st.write("Great! Please let me know how you plan to travel.")
+                traveling_via_input = st.text_input("Traveling via:")
+            else:
+                st.write("No worries! I can help you find a suitable travel vehicle.")
+                st.write("Here are some ways to travel to your destination:")
+                travel_options = ["Train", "Flight", "Bus"]
+                selected_option = st.selectbox("Select a mode of transportation:", travel_options)
+                if selected_option == "Train":
+                    st.write("You can book train tickets on websites like [Trainline](https://www.thetrainline.com) or [Amtrak](https://www.amtrak.com).")
+                elif selected_option == "Flight":
+                    st.write("You can book flights on websites like [Skyscanner](https://www.skyscanner.com) or [Kayak](https://www.kayak.com).")
+                elif selected_option == "Bus":
+                    st.write("You can book bus tickets on websites like [Greyhound](https://www.greyhound.com) or [FlixBus](https://www.flixbus.com).")
+            if st.button("Next"):
+                    chat_state.update({"traveling_via": traveling_via, "step": "traveling_with"})
+                    # Instead of rerunning the app, we can update the state
+                    st.rerun()
+                
+                    
         elif chat_state["step"] == "times":
             st.write("### Travel Times")
             col1, col2 = st.columns(2)
@@ -415,34 +508,37 @@ def show_chatbot():
                     step=300  # 5-minute intervals
                 )
                 st.info(f"Departure: {departure_time.strftime('%I:%M %p')}")
-            
             if st.button("Confirm Times"):
                 chat_state.update({
                     "arrival_time": arrival_time,
                     "departure_time": departure_time,
                     "step": "traveling_with"
                 })
-                st.experimental_rerun()
+                # Instead of rerunning the app, we can update the state
+                st.rerun()
 
         elif chat_state["step"] == "traveling_with":
             traveling_with = st.radio("Are you traveling with pets or children?", ["Yes", "No"])
             if st.button("Next"):
                 chat_state.update({"traveling_with": traveling_with, "step": "interests"})
-                st.experimental_rerun()
+                # Instead of rerunning the app, we can update the state
+                st.rerun()
 
         elif chat_state["step"] == "interests":
             interests_input = st.text_area("🎯 Enter your interests (comma-separated)",
-                                         value=", ".join(chat_state["interests"]))
+                                value=", ".join(chat_state["interests"]))
             if interests_input:
                 chat_state.update(
                     {"interests": [i.strip() for i in interests_input.split(",") if i.strip()], "step": "confirm"})
-                st.experimental_rerun()
+                # Instead of rerunning the app, we can update the state
+                st.rerun()
 
         elif chat_state["step"] == "confirm":
             st.write("### Trip Summary")
             st.write(f"🌍 Destination: {chat_state['city']}")
             st.write(f"📅 Dates: {chat_state['start_date'].strftime('%B %d, %Y')} - {chat_state['end_date'].strftime('%B %d, %Y')}")
             st.write(f"⏱️ Duration: {chat_state['duration']} days")
+            st.write(f"🚗 Traveling via: {chat_state['traveling_via']}")
             st.write(f"🛬 Arrival Time: {chat_state['arrival_time'].strftime('%I:%M %p')}")
             st.write(f"🛫 Departure Time: {chat_state['departure_time'].strftime('%I:%M %p')}")
             st.write(f"👥 Traveling with pets/children: {chat_state['traveling_with']}")
@@ -450,7 +546,8 @@ def show_chatbot():
             
             if st.button("Generate Itinerary"):
                 chat_state["step"] = "generate"
-                st.experimental_rerun()
+                # Instead of rerunning the app, we can update the state
+                st.session_state.step = "itinerary"
 
         elif chat_state["step"] == "generate":
             try:
@@ -459,12 +556,16 @@ def show_chatbot():
                     itinerary = chatbot.generate_itinerary()
                     
                 if itinerary:
+                    if 'suggested_locations' not in st.session_state.travel_info:
+                        st.session_state.travel_info['suggested_locations'] = []  # Initialize suggested locations if not present
+
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": "Here's your personalized itinerary!"
                     })
                     chat_state["step"] = "itinerary"
-                    st.experimental_rerun()
+                    # Instead of rerunning the app, we can update the state
+                    st.rerun()
                 else:
                     st.error("Failed to generate itinerary. Please try again.")
             except Exception as e:
@@ -492,7 +593,8 @@ def show_chatbot():
                             "role": "assistant",
                             "content": response
                         })
-                        st.experimental_rerun()
+                        # Instead of rerunning the app, we can update the state
+                        st.rerun()
                 
                 # Show the daily plans
                 for day in itinerary['daily_plans']:
@@ -504,7 +606,8 @@ def show_chatbot():
                             # Add a delete button for each activity
                             if st.button(f"🗑️ Remove", key=f"remove_{day['day']}_{activity['time']}"):
                                 day['activities'].remove(activity)
-                                st.experimental_rerun()
+                                # Instead of rerunning the app, we can update the state
+                                st.rerun()
 
     # Map display in second column
     with main_col2:
@@ -529,6 +632,21 @@ def show_chatbot():
                     })
             
             chatbot.display_map(st.session_state.travel_info['destination'], locations)
+            
+    if st.session_state.chat_state["step"] == "famous_places":
+        # Display the famous places in the city
+        chatbot = TravelChatbot()
+        famous_places = chatbot.fetch_famous_places(chat_state["city"])
+        if famous_places:
+            st.write("Here are some famous places in your destination city:")
+            for place in famous_places:
+                st.write(f"**{place['name']}** - {place['address']}")
+                if place['image_url']:
+                    st.image(place['image_url'], caption=place['name'], use_column_width=True)
+        else:
+            st.warning("No famous places found.")
+        chat_state["step"] = "interests"
+        st.rerun()
 
     # IMPORTANT: Move chat_input outside of any columns, forms, expanders, etc.
     # This needs to be at the root level of the app
@@ -554,7 +672,22 @@ def show_chatbot():
                 "role": "assistant",
                 "content": response
             })
-            st.experimental_rerun()
+                # Instead of rerunning the app, we can update the state
+            st.session_state.step = "traveling_with"
+                
+            # Instead of rerunning the app, we can update the state
+            st.session_state.step = "confirm"
+            
+            # Instead of rerunning the app, we can update the state
+            st.session_state.step = "generate"
+            
+            # Instead of rerunning the app, we can update the state
+            st.session_state.step = "itinerary"
+            
+            # Instead of rerunning the app, we can update the state
+            st.session_state.travel_info['itinerary'] = itinerary
+            st.rerun()
+
 
 # Make the function available for import
 show_chatbot = show_chatbot
