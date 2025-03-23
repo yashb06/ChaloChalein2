@@ -1,7 +1,5 @@
 import streamlit as st
 import sys
-sys.path.append("c:/Users/DARSHAN/OneDrive - somaiya.edu/Desktop/ChaloChalein")
-
 from components.authentication import show_auth_page
 from components.homepage import show_homepage
 from components.chatbot import show_chatbot  # Importing the chatbot function
