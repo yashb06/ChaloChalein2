@@ -1,44 +1,25 @@
 import requests
-import streamlit as st
-from datetime import datetime
 
-def get_weather_forecast(lat, lng, date):
+API_KEY = "6646d76918a04273941173000252003"  # New WeatherAPI key
+
+def get_weather_forecast(city):
     """
-    Get weather forecast for the specified location and date
+    Get weather forecast for a given location using WeatherAPI.
     """
-    api_key = st.secrets["WHEATHER_API"]
-    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lng}&appid={api_key}&units=metric"
-    
+    url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=no"
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
-        # Find forecast closest to the target date
-        target_date = datetime.combine(date, datetime.min.time())
-        
-        for forecast in data['list']:
-            forecast_date = datetime.fromtimestamp(forecast['dt'])
-            if forecast_date.date() == target_date.date():
-                return {
-                    'temperature': forecast['main']['temp'],
-                    'description': forecast['weather'][0]['description'],
-                    'humidity': forecast['main']['humidity']
-                }
-    return None
+        return {
+            "location": data["location"]["name"],
+            "temperature": data["current"]["temp_c"],
+            "description": data["current"]["condition"]["text"]
+        }
+    else:
+        return {"error": "Unable to fetch weather data"}
 
-def get_location_coordinates(location_name):
+def get_location_coordinates(location):
     """
-    Get coordinates for a location using Google Maps Geocoding API
+    Get coordinates for a given location. Placeholder implementation.
     """
-    api_key = st.secrets["GOOGLE_MAPS_API_KEY"]
-    url = f"https://maps.googleapis.com/maps/api/geocode/json?address={location_name}&key={api_key}"
-    
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        if data['results']:
-            location = data['results'][0]['geometry']['location']
-            return {
-                'lat': location['lat'],
-                'lng': location['lng']
-            }
-    return None
+    return {"latitude": 0.0, "longitude": 0.0}
