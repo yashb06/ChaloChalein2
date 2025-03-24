@@ -599,10 +599,10 @@ def show_chatbot():
                             st.write(f"📍 Location: {activity['location']}")
                             
                             # Add a delete button for each activity
-                            if st.button(f"🗑️ Remove", key=f"remove_{day['day']}_{activity['time']}"):
-                                day['activities'].remove(activity)
+                            #if st.button(f"🗑️ Remove", key=f"remove_{day['day']}_{activity['time']}"):
+                            #    day['activities'].remove(activity)
                                 # Instead of rerunning the app, we can update the state
-                                st.rerun()
+                            
 
     # Map display in second column
     with main_col2:
