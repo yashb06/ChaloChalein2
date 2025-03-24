@@ -443,7 +443,6 @@ def show_chatbot():
                 else:
                     st.warning("Could not retrieve weather data.")
                 # Instead of rerunning the app, we can update the state
-                st.rerun()
 
         elif chat_state["step"] == "dates":
             col1, col2 = st.columns(2)
@@ -463,21 +462,21 @@ def show_chatbot():
                             "start_date": start_date,
                             "end_date": end_date,
                             "duration": duration,
-                            "step": "times"
+                            "step": "traveling_via"
                         })
                         # Instead of rerunning the app, we can update the state
-                st.rerun()
         elif chat_state["step"] == "traveling_via":
             st.write(" Travel Vehicle")
-            traveling_via = st.radio("Do you already have planned your travel vehicle?", ["Yes", "No"])
-            if traveling_via == "Yes":
+            traveling_via_input = st.radio("Do you already have planned your travel vehicle?", ["Yes", "No"])
+            if traveling_via_input == "Yes":
                 st.write("Great! Please let me know how you plan to travel.")
-                traveling_via_input = st.text_input("Traveling via:")
+                traveling_via = st.text_input("Traveling via:")
             else:
                 st.write("No worries! I can help you find a suitable travel vehicle.")
                 st.write("Here are some ways to travel to your destination:")
                 travel_options = ["Train", "Flight", "Bus"]
                 selected_option = st.selectbox("Select a mode of transportation:", travel_options)
+                traveling_via=selected_option
                 if selected_option == "Train":
                     st.write("You can book train tickets on websites like [Trainline](https://www.thetrainline.com) or [Amtrak](https://www.amtrak.com).")
                 elif selected_option == "Flight":
@@ -485,9 +484,8 @@ def show_chatbot():
                 elif selected_option == "Bus":
                     st.write("You can book bus tickets on websites like [Greyhound](https://www.greyhound.com) or [FlixBus](https://www.flixbus.com).")
             if st.button("Next"):
-                    chat_state.update({"traveling_via": traveling_via, "step": "traveling_with"})
+                    chat_state.update({"traveling_via": traveling_via, "step": "times"})
                     # Instead of rerunning the app, we can update the state
-                    st.rerun()
                 
                     
         elif chat_state["step"] == "times":
@@ -515,14 +513,12 @@ def show_chatbot():
                     "step": "traveling_with"
                 })
                 # Instead of rerunning the app, we can update the state
-                st.rerun()
 
         elif chat_state["step"] == "traveling_with":
             traveling_with = st.radio("Are you traveling with pets or children?", ["Yes", "No"])
             if st.button("Next"):
                 chat_state.update({"traveling_with": traveling_with, "step": "interests"})
                 # Instead of rerunning the app, we can update the state
-                st.rerun()
 
         elif chat_state["step"] == "interests":
             interests_input = st.text_area("🎯 Enter your interests (comma-separated)",
@@ -531,7 +527,6 @@ def show_chatbot():
                 chat_state.update(
                     {"interests": [i.strip() for i in interests_input.split(",") if i.strip()], "step": "confirm"})
                 # Instead of rerunning the app, we can update the state
-                st.rerun()
 
         elif chat_state["step"] == "confirm":
             st.write("### Trip Summary")
@@ -633,7 +628,7 @@ def show_chatbot():
             
             chatbot.display_map(st.session_state.travel_info['destination'], locations)
             
-    if st.session_state.chat_state["step"] == "famous_places":
+    if 'itinerary'in st.session_state.travel_info:
         # Display the famous places in the city
         chatbot = TravelChatbot()
         famous_places = chatbot.fetch_famous_places(chat_state["city"])
@@ -645,8 +640,7 @@ def show_chatbot():
                     st.image(place['image_url'], caption=place['name'], use_column_width=True)
         else:
             st.warning("No famous places found.")
-        chat_state["step"] = "interests"
-        st.rerun()
+        chat_state["step"] = "itinerary"
 
     # IMPORTANT: Move chat_input outside of any columns, forms, expanders, etc.
     # This needs to be at the root level of the app
@@ -672,18 +666,6 @@ def show_chatbot():
                 "role": "assistant",
                 "content": response
             })
-                # Instead of rerunning the app, we can update the state
-            st.session_state.step = "traveling_with"
-                
-            # Instead of rerunning the app, we can update the state
-            st.session_state.step = "confirm"
-            
-            # Instead of rerunning the app, we can update the state
-            st.session_state.step = "generate"
-            
-            # Instead of rerunning the app, we can update the state
-            st.session_state.step = "itinerary"
-            
             # Instead of rerunning the app, we can update the state
             st.session_state.travel_info['itinerary'] = itinerary
             st.rerun()
